@@ -5,6 +5,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"  # Go up from scripts/ to project root
 PRD_FILE="$SCRIPT_DIR/prd.json"
 PROGRESS_FILE="$SCRIPT_DIR/progress.txt"
 HANDOFF_FILE="$SCRIPT_DIR/handoff.json"
@@ -99,7 +100,7 @@ track_branch() {
 
 # Initialize or reset progress file
 reset_progress_file() {
-    cat > "$PROGRESS_FILE" << 'EOF'
+    cat > "$PROGRESS_FILE" << EOF
 # Ralph Progress Log
 
 ## Codebase Patterns
@@ -109,7 +110,6 @@ reset_progress_file() {
 
 Started: $(date)
 EOF
-    sed -i '' "s/\$(date)/$(date)/" "$PROGRESS_FILE" 2>/dev/null || sed -i "s/\$(date)/$(date)/" "$PROGRESS_FILE"
 }
 
 # Initialize progress file if it doesn't exist
@@ -143,6 +143,25 @@ check_handoff_status() {
         echo "  Instruction: $instruction"
         echo ""
     fi
+}
+
+# Build the prompt for Claude
+build_prompt() {
+    # Read the base instructions
+    local base_instructions=$(cat "$AGENT_INSTRUCTIONS")
+
+    # Add context about file locations
+    local context="
+IMPORTANT FILE LOCATIONS (relative to project root):
+- PRD file: scripts/ralph/prd.json (or $PRD_FILE)
+- Progress file: scripts/ralph/progress.txt (or $PROGRESS_FILE)
+- Handoff file: scripts/ralph/handoff.json (or $HANDOFF_FILE)
+
+Working directory: $PROJECT_DIR
+
+$base_instructions"
+
+    echo "$context"
 }
 
 # Main loop
@@ -179,10 +198,19 @@ main() {
         echo "  Iteration $i of $MAX_ITERATIONS"
         echo "==========================================="
 
-        # Run Claude with the agent instructions
+        # Create a temporary file with the full prompt
+        TEMP_PROMPT=$(mktemp)
+        build_prompt > "$TEMP_PROMPT"
+
+        # Run Claude with the agent instructions from temp file
         # Use --dangerously-skip-permissions for autonomous operation
-        # Pipe the CLAUDE.md content as the prompt
-        OUTPUT=$(claude --dangerously-skip-permissions --print < "$AGENT_INSTRUCTIONS" 2>&1 | tee /dev/stderr) || true
+        log_info "Starting Claude instance..."
+
+        # Change to project directory and run claude
+        OUTPUT=$(cd "$PROJECT_DIR" && claude --dangerously-skip-permissions -p "$(cat "$TEMP_PROMPT")" 2>&1 | tee /dev/stderr) || true
+
+        # Clean up temp file
+        rm -f "$TEMP_PROMPT"
 
         # Check for completion signal
         if echo "$OUTPUT" | grep -q "<promise>COMPLETE</promise>"; then
