@@ -1,0 +1,27 @@
+# Runtime files
+progress.txt
+handoff.json
+prd.json
+
+# Archives
+archive/
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.log
